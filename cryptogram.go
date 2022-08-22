@@ -120,14 +120,14 @@ func CreateRandomCipher(passwd string) (*DefaultAuth, error) {
 	return s, nil
 }
 
-// 创建认证证书
-func CreateAuth(encrytype string, passwd string) (socks5Auth, error) {
+// CreateAuth 创建认证证书
+func CreateAuth(encry string, passwd string) (socks5Auth, error) {
 	if len(passwd) == 0 {
 		return nil, errors.New("密码不能为空")
 	}
 	var s socks5Auth
 	var err error
-	switch encrytype {
+	switch encry {
 	case "simple":
 		s, err = CreateSimpleCipher(passwd)
 
@@ -143,13 +143,16 @@ func CreateAuth(encrytype string, passwd string) (socks5Auth, error) {
 	return s, nil
 }
 
-// 加密io复制，可接收加密函数作为参数
-func SecureCopy(src io.ReadWriteCloser, dst io.ReadWriteCloser, secure func(b []byte) error) (written int64, err error) {
+// SecureCopy 加密io复制，可接收加密函数作为参数
+func SecureCopy(src io.ReadWriteCloser, dst io.ReadWriteCloser, handle func(b []byte) error) (written int64, err error) {
 	size := 1024
 	buf := make([]byte, size)
 	for {
 		nr, er := src.Read(buf)
-		secure(buf)
+		err := handle(buf)
+		if err != nil {
+			return 0, err
+		}
 		if nr > 0 {
 			nw, ew := dst.Write(buf[0:nr])
 			if nw > 0 {

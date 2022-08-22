@@ -6,41 +6,41 @@ import (
 	"sync"
 )
 
-func handleClientRequest(client *net.TCPConn, auth socks5Auth) {
-	if client == nil {
+func handleClientRequest(conn *net.TCPConn, auth socks5Auth) {
+	if conn == nil {
 		return
 	}
-	defer client.Close()
+	defer conn.Close()
 
 	// 初始化一个字符串buff
 	buff := make([]byte, 255)
 
 	// 认证协商
 	var proto ProtocolVersion
-	n, err := auth.DecodeRead(client, buff) //解密
+	n, err := auth.DecodeRead(conn, buff) //解密
 	resp, err := proto.HandleHandshake(buff[0:n])
-	auth.EncodeWrite(client, resp) //加密
+	auth.EncodeWrite(conn, resp) //加密
 	if err != nil {
-		log.Print(client.RemoteAddr(), err)
+		log.Print(conn.RemoteAddr(), err)
 		return
 	}
 
-	//获取客户端代理的请求
+	// 获取客户端代理的请求
 	var request Socks5Resolution
-	n, err = auth.DecodeRead(client, buff)
+	n, err = auth.DecodeRead(conn, buff)
 	resp, err = request.LSTRequest(buff[0:n])
-	auth.EncodeWrite(client, resp)
+	auth.EncodeWrite(conn, resp)
 	if err != nil {
-		log.Print(client.RemoteAddr(), err)
+		log.Print(conn.RemoteAddr(), err)
 		return
 	}
 
-	log.Println(client.RemoteAddr(), request.DSTDOMAIN, request.DSTADDR, request.DSTPORT)
+	log.Println(conn.RemoteAddr(), request.DSTDOMAIN, request.DSTADDR, request.DSTPORT)
 
 	// 连接真正的远程服务
 	dstServer, err := net.DialTCP("tcp", nil, request.RAWADDR)
 	if err != nil {
-		log.Print(client.RemoteAddr(), err)
+		log.Print(conn.RemoteAddr(), err)
 		return
 	}
 	defer dstServer.Close()
@@ -51,32 +51,31 @@ func handleClientRequest(client *net.TCPConn, auth socks5Auth) {
 	// 本地的内容copy到远程端
 	go func() {
 		defer wg.Done()
-		SecureCopy(client, dstServer, auth.Decrypt)
+		SecureCopy(conn, dstServer, auth.Decrypt)
 	}()
 
 	// 远程得到的内容copy到源地址
 	go func() {
 		defer wg.Done()
-		SecureCopy(dstServer, client, auth.Encrypt)
+		SecureCopy(dstServer, conn, auth.Encrypt)
 	}()
 	wg.Wait()
-
 }
 
-func Server(listenAddrString string, encrytype string, passwd string) {
-	//所有客户服务端的流都加密,
-	auth, err := CreateAuth(encrytype, passwd)
+func Server(listenPort string, encrypt string, passwd string) {
+	// 所有客户服务端的流都加密,
+	auth, err := CreateAuth(encrypt, passwd)
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Printf("你的密码是:%s ,请保管好你的密码", passwd)
+	log.Printf("服务器||验证密码是:%s", passwd)
 
 	// 监听客户端
-	listenAddr, err := net.ResolveTCPAddr("tcp", listenAddrString)
+	listenAddr, err := net.ResolveTCPAddr("tcp", listenPort)
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Printf("监听服务器端口: %s ", listenAddrString)
+	log.Printf("服务器||监听的端口: %s ", listenPort)
 
 	listener, err := net.ListenTCP("tcp", listenAddr)
 	if err != nil {

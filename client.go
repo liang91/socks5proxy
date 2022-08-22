@@ -16,8 +16,7 @@ type TcpClient struct {
 	server *net.TCPAddr
 }
 
-func handleProxyRequest(localClient *net.TCPConn, serverAddr *net.TCPAddr, auth socks5Auth, recvHTTPProto string) {
-
+func handleProxyRequest(localClient *net.TCPConn, serverAddr *net.TCPAddr, auth socks5Auth, proxyProtocol string) {
 	// 远程连接IO
 	dstServer, err := net.DialTCP("tcp", nil, serverAddr)
 	if err != nil {
@@ -26,14 +25,13 @@ func handleProxyRequest(localClient *net.TCPConn, serverAddr *net.TCPAddr, auth 
 		return
 	}
 	defer dstServer.Close()
-
 	defer localClient.Close()
 
 	// 和远程端建立安全信道
 	wg := new(sync.WaitGroup)
 	wg.Add(2)
 
-	if recvHTTPProto == "http" {
+	if proxyProtocol == "http" {
 		// socket5请求认证协商
 		// 第一阶段协议版本及认证方式
 		auth.EncodeWrite(dstServer, []byte{0x05, 0x01, 0x00})
@@ -65,10 +63,10 @@ func handleProxyRequest(localClient *net.TCPConn, serverAddr *net.TCPAddr, auth 
 		localReq := buff[:n]
 		j := 0
 		z := 0
-		httpreq := []string{}
+		var httpReq []string
 		for i := 0; i < n; i++ {
 			if buff[i] == 32 {
-				httpreq = append(httpreq, string(buff[j:i]))
+				httpReq = append(httpReq, string(buff[j:i]))
 				j = i + 1
 			}
 			if buff[i] == 10 {
@@ -76,7 +74,7 @@ func handleProxyRequest(localClient *net.TCPConn, serverAddr *net.TCPAddr, auth 
 			}
 		}
 
-		dstURI, err := url.ParseRequestURI(httpreq[1])
+		dstURI, err := url.ParseRequestURI(httpReq[1])
 		if err != nil {
 			log.Print(err)
 			return
@@ -147,8 +145,6 @@ func handleProxyRequest(localClient *net.TCPConn, serverAddr *net.TCPAddr, auth 
 
 		wg.Wait()
 
-	} else {
-
 		// 本地的内容copy到远程端
 		go func() {
 			defer wg.Done()
@@ -162,29 +158,28 @@ func handleProxyRequest(localClient *net.TCPConn, serverAddr *net.TCPAddr, auth 
 		}()
 		wg.Wait()
 	}
-
 }
 
-func Client(listenAddrString string, serverAddrString string, encrytype string, passwd string, recvHTTPProto string) {
-	//所有客户服务端的流都加密,
-	auth, err := CreateAuth(encrytype, passwd)
+func Client(listenAddrString string, serverAddrString string, encrypt string, passwd string, proxyProto string) {
+	// 所有客户服务端的流都加密,
+	auth, err := CreateAuth(encrypt, passwd)
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Printf("你的密码是: %s ,请保管好你的密码", passwd)
+	log.Printf("客户端||登录密码是:%s", passwd)
 
-	// proxy地址
+	// Proxy地址
 	serverAddr, err := net.ResolveTCPAddr("tcp", serverAddrString)
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Printf("连接远程服务器: %s ....", serverAddrString)
+	log.Printf("客户端||连接代理:%s", serverAddrString)
 
 	listenAddr, err := net.ResolveTCPAddr("tcp", listenAddrString)
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Printf("监听本地端口: %s ", listenAddrString)
+	log.Printf("客户端||监听端口: %s ", listenAddrString)
 
 	listener, err := net.ListenTCP("tcp", listenAddr)
 	if err != nil {
@@ -196,6 +191,6 @@ func Client(listenAddrString string, serverAddrString string, encrytype string, 
 		if err != nil {
 			log.Fatal(err)
 		}
-		go handleProxyRequest(localClient, serverAddr, auth, recvHTTPProto)
+		go handleProxyRequest(localClient, serverAddr, auth, proxyProto)
 	}
 }
