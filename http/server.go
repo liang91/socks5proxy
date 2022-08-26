@@ -7,7 +7,7 @@ import (
 
 func hello(w http.ResponseWriter, req *http.Request) {
 	fmt.Println(req.URL.Query().Get("name"))
-	fmt.Fprintln(w, "hello from server")
+	fmt.Fprint(w, "hello from server")
 }
 
 func headers(w http.ResponseWriter, req *http.Request) {
@@ -22,5 +22,5 @@ func main() {
 	http.HandleFunc("/hello", hello)
 	http.HandleFunc("/header", headers)
 
-	http.ListenAndServe(":8090", nil)
+	http.ListenAndServe("", nil)
 }
